@@ -6,7 +6,6 @@ const EXPANSION_SIZE = 4; // Each expansion = 4×4 tiles
 let gridWidth = 20; // tiles (5 expansions × 4)
 let gridHeight = 20; // tiles (5 expansions × 4)
 let buildings = [];
-let buildingSets = [];
 let roads = new Set();
 let selectedBuilding = null;
 let isDragging = false;
@@ -60,8 +59,7 @@ function initializeTownHall() {
         requiresRoad: true,
         color: buildingColorRoad,
         isTownHall: true,
-        visible: true,
-        buildingSetId: null
+        visible: true
     }];
     updateBuildingList();
     updateStatistics();
@@ -79,9 +77,6 @@ function setupEventListeners() {
     document.getElementById('confirm-add-btn').addEventListener('click', addBuilding);
     document.getElementById('cancel-add-btn').addEventListener('click', closeModal);
     document.getElementById('close-modal').addEventListener('click', closeModal);
-    
-    // Building sets
-    document.getElementById('add-set-btn').addEventListener('click', addBuildingSet);
     
     // Optimization
     document.getElementById('solve-btn').addEventListener('click', optimizeLayout);
@@ -237,8 +232,6 @@ function addBuilding() {
     const width = parseInt(document.getElementById('building-width').value);
     const height = parseInt(document.getElementById('building-height').value);
     const requiresRoad = document.getElementById('requires-road').checked;
-    const buildingSetId = document.getElementById('building-set').value || null;
-    
     if (!name) {
         alert('Please enter a building name');
         return;
@@ -259,8 +252,7 @@ function addBuilding() {
         requiresRoad: requiresRoad,
         color: requiresRoad ? buildingColorRoad : buildingColorNoRoad,
         isTownHall: false,
-        visible: true,
-        buildingSetId: buildingSetId
+        visible: true
     };
     
     buildings.push(building);
@@ -268,70 +260,6 @@ function addBuilding() {
     closeModal();
     redraw();
     saveState();
-}
-
-// Add building set
-function addBuildingSet() {
-    const name = prompt('Enter building set name:');
-    if (!name) return;
-    
-    const setId = 'set-' + Date.now();
-    buildingSets.push({
-        id: setId,
-        name: name,
-        buildings: []
-    });
-    
-    updateBuildingSetsList();
-    updateBuildingSetSelect();
-}
-
-// Update building sets list
-function updateBuildingSetsList() {
-    const list = document.getElementById('building-sets-list');
-    list.innerHTML = '';
-    
-    buildingSets.forEach(set => {
-        const item = document.createElement('div');
-        item.className = 'building-set-item';
-        item.innerHTML = `
-            <div class="building-item-header">
-                <span class="building-item-name">${set.name}</span>
-                <button class="building-item-delete" data-set-id="${set.id}">×</button>
-            </div>
-            <div class="building-item-info">${set.buildings.length} buildings</div>
-        `;
-        
-        item.querySelector('.building-item-delete').addEventListener('click', () => {
-            deleteBuildingSet(set.id);
-        });
-        
-        list.appendChild(item);
-    });
-}
-
-// Delete building set
-function deleteBuildingSet(setId) {
-    buildingSets = buildingSets.filter(s => s.id !== setId);
-    buildings.forEach(b => {
-        if (b.buildingSetId === setId) b.buildingSetId = null;
-    });
-    updateBuildingSetsList();
-    updateBuildingSetSelect();
-    updateBuildingList();
-}
-
-// Update building set select
-function updateBuildingSetSelect() {
-    const select = document.getElementById('building-set');
-    select.innerHTML = '<option value="">None</option>';
-    
-    buildingSets.forEach(set => {
-        const option = document.createElement('option');
-        option.value = set.id;
-        option.textContent = set.name;
-        select.appendChild(option);
-    });
 }
 
 // Update building list in sidebar
@@ -345,10 +273,6 @@ function updateBuildingList() {
         item.draggable = true;
         item.dataset.buildingId = building.id;
         
-        const setName = building.buildingSetId 
-            ? buildingSets.find(s => s.id === building.buildingSetId)?.name || 'Unknown'
-            : 'None';
-        
         item.innerHTML = `
             <div class="building-item-header">
                 <span class="building-item-name">${building.name}</span>
@@ -361,7 +285,6 @@ function updateBuildingList() {
                 ${building.width}×${building.height} tiles
                 ${building.requiresRoad ? '• Requires Road' : '• No Road'}
                 <span class="building-item-color" style="background: ${building.color}"></span>
-                <span style="font-size: 0.75em; color: #999;">Set: ${setName}</span>
             </div>
         `;
         
@@ -399,7 +322,6 @@ function editBuilding(building) {
     document.getElementById('building-width').value = building.width;
     document.getElementById('building-height').value = building.height;
     document.getElementById('requires-road').checked = building.requiresRoad;
-    document.getElementById('building-set').value = building.buildingSetId || '';
     document.getElementById('add-building-modal').classList.add('active');
     
     // Modify confirm button to update instead of add
@@ -422,7 +344,6 @@ function updateBuilding(buildingId) {
     building.width = parseInt(document.getElementById('building-width').value);
     building.height = parseInt(document.getElementById('building-height').value);
     building.requiresRoad = document.getElementById('requires-road').checked;
-    building.buildingSetId = document.getElementById('building-set').value || null;
     building.color = building.requiresRoad ? buildingColorRoad : buildingColorNoRoad;
     
     // Validate placement
@@ -912,7 +833,6 @@ function exportCity() {
         gridWidth: gridWidth,
         gridHeight: gridHeight,
         buildings: buildings,
-        buildingSets: buildingSets,
         timestamp: new Date().toISOString()
     };
     
@@ -940,14 +860,11 @@ function importCity() {
                 const data = JSON.parse(event.target.result);
                 
                 if (data.buildings) buildings = data.buildings;
-                if (data.buildingSets) buildingSets = data.buildingSets;
                 if (data.gridWidth) gridWidth = data.gridWidth;
                 if (data.gridHeight) gridHeight = data.gridHeight;
                 
                 rebuildRoads();
                 updateBuildingList();
-                updateBuildingSetsList();
-                updateBuildingSetSelect();
                 updateGridSize();
                 redraw();
                 saveState();
@@ -970,7 +887,6 @@ function saveCity() {
         gridWidth: gridWidth,
         gridHeight: gridHeight,
         buildings: buildings,
-        buildingSets: buildingSets,
         timestamp: new Date().toISOString()
     };
     
@@ -985,14 +901,11 @@ function loadCity() {
             const data = JSON.parse(saved);
             
             if (data.buildings) buildings = data.buildings;
-            if (data.buildingSets) buildingSets = data.buildingSets;
             if (data.gridWidth) gridWidth = data.gridWidth;
             if (data.gridHeight) gridHeight = data.gridHeight;
             
             rebuildRoads();
             updateBuildingList();
-            updateBuildingSetsList();
-            updateBuildingSetSelect();
             updateGridSize();
             redraw();
             saveState();
