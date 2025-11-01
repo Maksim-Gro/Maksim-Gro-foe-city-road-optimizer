@@ -13,7 +13,6 @@ let dragOffset = { x: 0, y: 0 };
 let canvas;
 let ctx;
 let zoomLevel = 1;
-let canvasRotation = 0;
 let isOptimizing = false;
 let optimizationCanceled = false;
 let viewMode = 'top-down'; // 'top-down' or 'isometric'
@@ -22,10 +21,6 @@ let viewMode = 'top-down'; // 'top-down' or 'isometric'
 let buildingColorRoad = '#8B4513';
 let buildingColorNoRoad = '#4682B4';
 
-// History for undo/redo
-let history = [];
-let historyIndex = -1;
-const MAX_HISTORY = 50;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -44,8 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Draw initial state
     redraw();
     
-    // Save initial state
-    saveState();
 });
 
 // Initialize Town Hall (7×6 dimensions)
@@ -95,16 +88,6 @@ function setupEventListeners() {
         setZoom(parseFloat(e.target.value));
     });
     
-    // Rotation controls
-    document.querySelectorAll('.rotate-option').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const action = btn.dataset.action;
-            if (action === 'rotate-right') rotateCanvas(90);
-            else if (action === 'rotate-left') rotateCanvas(-90);
-            else if (action === 'flip') rotateCanvas(180);
-        });
-    });
-    
     // Legend
     document.getElementById('legend-select').addEventListener('change', redraw);
     
@@ -122,14 +105,6 @@ function setupEventListeners() {
         redraw();
     });
     
-    // Import/Export
-    document.getElementById('import-btn').addEventListener('click', importCity);
-    document.getElementById('export-btn').addEventListener('click', exportCity);
-    document.getElementById('save-btn').addEventListener('click', saveCity);
-    
-    // Screenshot
-    document.getElementById('screenshot-btn').addEventListener('click', takeScreenshot);
-    
     // Sidebar toggle
     document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
     
@@ -138,31 +113,12 @@ function setupEventListeners() {
         alert('Forge of Empires City Optimizer\n\nAdd buildings, drag them on the grid, and click Solve to find the optimal layout with minimal roads.');
     });
     
-    // Undo/Redo
-    document.getElementById('undo-btn').addEventListener('click', undo);
-    document.getElementById('redo-btn').addEventListener('click', redo);
-    
     // Canvas interaction
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
     
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey || e.metaKey) {
-            if (e.key === 'z' && !e.shiftKey) {
-                e.preventDefault();
-                undo();
-            } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-                e.preventDefault();
-                redo();
-            } else if (e.key === 's') {
-                e.preventDefault();
-                exportCity();
-            }
-        }
-    });
 }
 
 // Apply grid size
@@ -190,7 +146,6 @@ function applyGridSize() {
     
     updateGridSize();
     redraw();
-    saveState();
 }
 
 // Update grid size display and canvas
@@ -206,20 +161,25 @@ function updateGridSize() {
         canvasWidth = (gridWidth + gridHeight) * TILE_SIZE * isoScale * zoomLevel;
         canvasHeight = (gridWidth + gridHeight) * TILE_SIZE * isoScale * zoomLevel;
     } else {
-        // Top-down view: exact grid dimensions
+        // Top-down (orthogonal) view: exact grid dimensions
         canvasWidth = gridWidth * TILE_SIZE * zoomLevel;
         canvasHeight = gridHeight * TILE_SIZE * zoomLevel;
     }
     
+    // Set canvas dimensions
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     
-    // Center canvas with proper positioning
-    canvas.style.position = 'absolute';
-    canvas.style.top = '50%';
-    canvas.style.left = '50%';
-    canvas.style.transform = `translate(-50%, -50%) rotate(${canvasRotation}deg)`;
-    canvas.style.transformOrigin = 'center center';
+    // Update canvas style for proper display
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
+    
+    // Ensure container has enough space
+    const container = canvas.parentElement;
+    if (container) {
+        container.style.minWidth = Math.max(container.offsetWidth, canvasWidth + 40) + 'px';
+        container.style.minHeight = Math.max(container.offsetHeight, canvasHeight + 40) + 'px';
+    }
 }
 
 // Zoom functions
@@ -227,13 +187,6 @@ function setZoom(level) {
     zoomLevel = Math.max(0.5, Math.min(2, level));
     document.getElementById('zoom-slider').value = zoomLevel;
     document.getElementById('zoom-value').textContent = Math.round(zoomLevel * 100) + '%';
-    updateGridSize();
-    redraw();
-}
-
-// Rotate canvas
-function rotateCanvas(degrees) {
-    canvasRotation = (canvasRotation + degrees) % 360;
     updateGridSize();
     redraw();
 }
@@ -281,7 +234,6 @@ function addBuilding() {
     updateBuildingList();
     closeModal();
     redraw();
-    saveState();
 }
 
 // Update building list in sidebar
@@ -378,7 +330,6 @@ function updateBuilding(buildingId) {
     updateBuildingList();
     closeModal();
     redraw();
-    saveState();
 }
 
 // Delete building
@@ -387,7 +338,6 @@ function deleteBuilding(buildingId) {
     rebuildRoads();
     updateBuildingList();
     redraw();
-    saveState();
 }
 
 // Mouse event handlers
@@ -408,11 +358,13 @@ function handleMouseDown(e) {
         x = Math.floor((mouseX / (tileSize * Math.sqrt(2)) + gridWidth / 2));
         y = Math.floor((mouseY / (tileSize * Math.sqrt(2)) + gridHeight / 2));
     } else {
-        // Top-down: account for centering offset
-        const offsetX = (rect.width - gridWidth * TILE_SIZE * scale) / 2;
-        const offsetY = (rect.height - gridHeight * TILE_SIZE * scale) / 2;
-        x = Math.floor((e.clientX - rect.left - offsetX) / (TILE_SIZE * scale));
-        y = Math.floor((e.clientY - rect.top - offsetY) / (TILE_SIZE * scale));
+        // Top-down (orthogonal): direct mapping - canvas is centered in container
+        // Get mouse position relative to canvas
+        const canvasRect = canvas.getBoundingClientRect();
+        const canvasX = e.clientX - canvasRect.left;
+        const canvasY = e.clientY - canvasRect.top;
+        x = Math.floor(canvasX / (TILE_SIZE * scale));
+        y = Math.floor(canvasY / (TILE_SIZE * scale));
     }
     
     // Find building at this position
@@ -446,11 +398,12 @@ function handleMouseMove(e) {
         x = Math.floor((mouseX / (tileSize * Math.sqrt(2)) + gridWidth / 2)) - dragOffset.x;
         y = Math.floor((mouseY / (tileSize * Math.sqrt(2)) + gridHeight / 2)) - dragOffset.y;
     } else {
-        // Top-down: account for centering offset
-        const offsetX = (rect.width - gridWidth * TILE_SIZE * scale) / 2;
-        const offsetY = (rect.height - gridHeight * TILE_SIZE * scale) / 2;
-        x = Math.floor((e.clientX - rect.left - offsetX) / (TILE_SIZE * scale)) - dragOffset.x;
-        y = Math.floor((e.clientY - rect.top - offsetY) / (TILE_SIZE * scale)) - dragOffset.y;
+        // Top-down (orthogonal): direct mapping - canvas is centered in container
+        const canvasRect = canvas.getBoundingClientRect();
+        const canvasX = e.clientX - canvasRect.left;
+        const canvasY = e.clientY - canvasRect.top;
+        x = Math.floor(canvasX / (TILE_SIZE * scale)) - dragOffset.x;
+        y = Math.floor(canvasY / (TILE_SIZE * scale)) - dragOffset.y;
     }
     
     // Update preview
@@ -465,10 +418,6 @@ function handleMouseUp() {
         // Validate placement
         if (canPlaceBuilding(selectedBuilding, selectedBuilding.x, selectedBuilding.y)) {
             rebuildRoads();
-            saveState();
-        } else {
-            // Revert to original position
-            undo();
         }
     }
     isDragging = false;
@@ -497,7 +446,6 @@ function tryPlaceBuilding(buildingTemplate, x, y) {
         rebuildRoads();
         updateBuildingList();
         redraw();
-        saveState();
     } else {
         // Try to find a nearby valid position
         findAndPlaceBuilding(building);
@@ -551,7 +499,6 @@ function findAndPlaceBuilding(building, isUpdate = false) {
                         rebuildRoads();
                         updateBuildingList();
                         redraw();
-                        if (!isUpdate) saveState();
                         return;
                     }
                 }
@@ -597,25 +544,29 @@ function drawTopDownGrid() {
     
     const tileSize = TILE_SIZE * zoomLevel;
     
-    // Center the grid in canvas
-    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
-    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
-    
+    // In orthogonal view, grid fills entire canvas, no offset needed
+    // Draw vertical lines
     for (let x = 0; x <= gridWidth; x++) {
-        const px = offsetX + x * tileSize;
+        const px = x * tileSize;
         ctx.beginPath();
-        ctx.moveTo(px, offsetY);
-        ctx.lineTo(px, offsetY + gridHeight * tileSize);
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, canvas.height);
         ctx.stroke();
     }
     
+    // Draw horizontal lines
     for (let y = 0; y <= gridHeight; y++) {
-        const py = offsetY + y * tileSize;
+        const py = y * tileSize;
         ctx.beginPath();
-        ctx.moveTo(offsetX, py);
-        ctx.lineTo(offsetX + gridWidth * tileSize, py);
+        ctx.moveTo(0, py);
+        ctx.lineTo(canvas.width, py);
         ctx.stroke();
     }
+    
+    // Draw a subtle border
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
 }
 
 // Draw isometric grid
@@ -667,20 +618,17 @@ function drawBuildings() {
     ctx.restore();
 }
 
-// Draw top-down buildings
+// Draw top-down buildings (orthogonal view)
 function drawTopDownBuildings() {
     const legendMode = document.getElementById('legend-select').value;
     const tileSize = TILE_SIZE * zoomLevel;
     
-    // Center offset
-    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
-    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
-    
+    // In orthogonal view, no offset needed - grid starts at 0,0
     buildings.forEach(building => {
         if (!building.visible) return;
         
-        const x = offsetX + building.x * tileSize;
-        const y = offsetY + building.y * tileSize;
+        const x = building.x * tileSize;
+        const y = building.y * tileSize;
         const width = building.width * tileSize;
         const height = building.height * tileSize;
         
@@ -826,18 +774,15 @@ function drawRoads() {
     updateStatistics();
 }
 
-// Draw top-down roads
+// Draw top-down roads (orthogonal view)
 function drawTopDownRoads() {
     const tileSize = TILE_SIZE * zoomLevel;
     
-    // Center offset
-    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
-    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
-    
+    // In orthogonal view, no offset needed - grid starts at 0,0
     roads.forEach(roadKey => {
         const [x, y] = roadKey.split(',').map(Number);
-        const px = offsetX + x * tileSize;
-        const py = offsetY + y * tileSize;
+        const px = x * tileSize;
+        const py = y * tileSize;
         
         ctx.fillStyle = '#808080';
         ctx.fillRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
@@ -1049,143 +994,6 @@ function updateStatistics() {
     document.getElementById('total-tiles-count').textContent = totalTiles;
 }
 
-// State management (Undo/Redo)
-function saveState() {
-    const state = {
-        buildings: JSON.parse(JSON.stringify(buildings)),
-        roads: new Set(roads)
-    };
-    
-    // Remove future states if we're not at the end
-    history = history.slice(0, historyIndex + 1);
-    history.push(state);
-    
-    // Limit history size
-    if (history.length > MAX_HISTORY) {
-        history.shift();
-    } else {
-        historyIndex++;
-    }
-}
-
-function undo() {
-    if (historyIndex > 0) {
-        historyIndex--;
-        restoreState(history[historyIndex]);
-    }
-}
-
-function redo() {
-    if (historyIndex < history.length - 1) {
-        historyIndex++;
-        restoreState(history[historyIndex]);
-    }
-}
-
-function restoreState(state) {
-    buildings = JSON.parse(JSON.stringify(state.buildings));
-    roads = new Set(state.roads);
-    updateBuildingList();
-    redraw();
-}
-
-// Import/Export
-function exportCity() {
-    const data = {
-        version: '1.0',
-        gridWidth: gridWidth,
-        gridHeight: gridHeight,
-        buildings: buildings,
-        timestamp: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `foe-city-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-function importCity() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json';
-    
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const data = JSON.parse(event.target.result);
-                
-                if (data.buildings) buildings = data.buildings;
-                if (data.gridWidth) gridWidth = data.gridWidth;
-                if (data.gridHeight) gridHeight = data.gridHeight;
-                
-                rebuildRoads();
-                updateBuildingList();
-                updateGridSize();
-                redraw();
-                saveState();
-                
-                alert('City imported successfully!');
-            } catch (error) {
-                alert('Error importing city: ' + error.message);
-            }
-        };
-        reader.readAsText(file);
-    };
-    
-    input.click();
-}
-
-function saveCity() {
-    // Save to localStorage
-    const data = {
-        version: '1.0',
-        gridWidth: gridWidth,
-        gridHeight: gridHeight,
-        buildings: buildings,
-        timestamp: new Date().toISOString()
-    };
-    
-    localStorage.setItem('foe-city-save', JSON.stringify(data));
-    alert('City saved to browser storage!');
-}
-
-function loadCity() {
-    const saved = localStorage.getItem('foe-city-save');
-    if (saved) {
-        try {
-            const data = JSON.parse(saved);
-            
-            if (data.buildings) buildings = data.buildings;
-            if (data.gridWidth) gridWidth = data.gridWidth;
-            if (data.gridHeight) gridHeight = data.gridHeight;
-            
-            rebuildRoads();
-            updateBuildingList();
-            updateGridSize();
-            redraw();
-            saveState();
-        } catch (error) {
-            console.error('Error loading saved city:', error);
-        }
-    }
-}
-
-// Screenshot
-function takeScreenshot() {
-    const dataUrl = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `foe-city-screenshot-${Date.now()}.png`;
-    a.click();
-}
 
 // Toggle sidebar
 function toggleSidebar() {
@@ -1226,7 +1034,6 @@ async function optimizeLayout() {
             rebuildRoads();
             updateBuildingList();
             redraw();
-            saveState();
             
             alert(`Optimization complete! Road tiles: ${roads.size} (was ${originalRoads.size})`);
         } else if (optimizationCanceled) {
@@ -1792,7 +1599,3 @@ function createNeighborLayout(currentLayout, buildingsToOptimize, townHall) {
     return neighbor;
 }
 
-// Load saved city on startup
-window.addEventListener('load', () => {
-    loadCity();
-});
