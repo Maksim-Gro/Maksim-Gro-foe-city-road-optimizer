@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forge of Empires City Road Optimizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Toolbar -->
+        <header class="toolbar">
+            <div class="toolbar-left">
+                <h1 class="app-title">Forge of Empires City Optimizer</h1>
+            </div>
+            <div class="toolbar-right">
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="undo-btn" title="Undo">
+                        <span class="material-icons">undo</span>
+                    </button>
+                    <button class="toolbar-btn" id="redo-btn" title="Redo">
+                        <span class="material-icons">redo</span>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <div class="rotate-menu">
+                        <button class="toolbar-btn" id="rotate-menu-btn" title="Rotate">
+                            <span class="material-icons">loop</span>
+                        </button>
+                        <div class="rotate-dropdown" id="rotate-dropdown">
+                            <button class="rotate-option" data-action="rotate-right">
+                                <span class="material-icons">rotate_right</span>
+                            </button>
+                            <button class="rotate-option" data-action="flip">
+                                <span class="material-icons">flip</span>
+                            </button>
+                            <button class="rotate-option" data-action="rotate-left">
+                                <span class="material-icons">rotate_left</span>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="toolbar-btn" id="screenshot-btn" title="Screenshot">
+                        <span class="material-icons">screenshot</span>
+                    </button>
+                    <button class="toolbar-btn" id="help-btn" title="Help">
+                        <span class="material-icons">help_outline</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-wrapper">
+            <!-- Left Sidebar -->
+            <aside class="left-sidebar">
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="zoom-out-btn">
+                        <span class="material-icons">zoom_out</span>
+                    </button>
+                    <input type="range" id="zoom-slider" min="0.5" max="2" step="0.1" value="1">
+                    <button class="zoom-btn" id="zoom-in-btn">
+                        <span class="material-icons">zoom_in</span>
+                    </button>
+                    <span class="zoom-value" id="zoom-value">100%</span>
+                </div>
+
+                <div class="legend-section">
+                    <h3>Legend</h3>
+                    <select id="legend-select">
+                        <option value="name-size">Name & Size</option>
+                        <option value="name">Name Only</option>
+                        <option value="size">Size Only</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+
+                <div class="info-section">
+                    <button class="info-btn" id="info-btn" title="Info">
+                        <span class="material-icons">info</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <!-- Top Controls -->
+                <div class="top-controls">
+                    <div class="controls-left">
+                        <button class="collapse-btn" id="sidebar-toggle">
+                            <span class="material-icons">double_arrow</span>
+                        </button>
+                        <div class="file-controls">
+                            <button class="file-btn" id="import-btn">
+                                <span class="material-icons">input</span>
+                                <span>Import</span>
+                            </button>
+                            <button class="file-btn" id="export-btn">
+                                <span class="material-icons">cloud_download</span>
+                                <span>Export</span>
+                            </button>
+                            <button class="file-btn" id="save-btn">
+                                <span class="material-icons">cloud_upload</span>
+                                <span>Save</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="controls-right">
+                        <div class="optimization-controls">
+                            <label class="switch">
+                                <input type="checkbox" id="auto-optimize" checked>
+                                <span class="slider"></span>
+                                <span class="switch-label">
+                                    <span class="material-icons">update</span>
+                                    <span>Auto-Optimize</span>
+                                </span>
+                            </label>
+                            <div class="parallel-controls">
+                                <label>Parallel Processes:</label>
+                                <input type="number" id="parallel-processes" min="1" max="12" value="4">
+                            </div>
+                            <button class="solve-btn" id="solve-btn">
+                                <span class="material-icons">engineering</span>
+                                <span>Solve</span>
+                            </button>
+                            <button class="cancel-btn" id="cancel-btn" disabled>
+                                <span class="material-icons">cancel</span>
+                                <span>Cancel</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Grid -->
+                <div class="content-grid">
+                    <!-- Right Sidebar -->
+                    <aside class="right-sidebar">
+                        <div class="sidebar-section">
+                            <div class="section-header">
+                                <h2>Grid Configuration</h2>
+                            </div>
+                            <div class="form-group">
+                                <label for="grid-width">Width (expansions):</label>
+                                <input type="number" id="grid-width" min="1" max="15" value="5">
+                            </div>
+                            <div class="form-group">
+                                <label for="grid-height">Height (expansions):</label>
+                                <input type="number" id="grid-height" min="1" max="15" value="5">
+                            </div>
+                            <button id="apply-grid-btn" class="btn-primary">Apply Grid Size</button>
+                            <div class="grid-info">
+                                <p>Grid: <span id="grid-size-display">20×20</span> tiles</p>
+                                <p>(Each expansion = 4×4 tiles)</p>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="section-header">
+                                <h2>Building Sets</h2>
+                                <button class="icon-btn" id="add-set-btn" title="Add Set">
+                                    <span class="material-icons">add</span>
+                                </button>
+                            </div>
+                            <div id="building-sets-list"></div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="section-header">
+                                <h2>Buildings</h2>
+                                <button class="icon-btn" id="add-building-btn" title="Add Building">
+                                    <span class="material-icons">add</span>
+                                </button>
+                            </div>
+                            <div id="buildings-list"></div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="section-header">
+                                <h2>Town Hall Set</h2>
+                                <div class="header-controls">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="townhall-visible" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <button class="icon-btn" id="townhall-toggle" title="Toggle Visibility">
+                                        <span class="material-icons">visibility</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="townhall-info">
+                                <p>Town Hall (7×6)</p>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Canvas Area -->
+                    <div class="canvas-wrapper">
+                        <div class="canvas-container">
+                            <canvas id="grid-canvas"></canvas>
+                            <div class="canvas-overlay" id="canvas-overlay"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Add Building Modal -->
+        <div class="modal" id="add-building-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Add Building</h2>
+                    <button class="modal-close" id="close-modal">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="building-name">Name:</label>
+                        <input type="text" id="building-name" placeholder="e.g., House">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="building-width">Width (tiles):</label>
+                            <input type="number" id="building-width" min="1" value="3">
+                        </div>
+                        <div class="form-group">
+                            <label for="building-height">Height (tiles):</label>
+                            <input type="number" id="building-height" min="1" value="3">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="requires-road"> Requires Road Connection
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="building-color-road">Color (Road Required):</label>
+                            <input type="color" id="building-color-road" value="#8B4513">
+                        </div>
+                        <div class="form-group">
+                            <label for="building-color-no-road">Color (No Road):</label>
+                            <input type="color" id="building-color-no-road" value="#4682B4">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="building-set">Building Set:</label>
+                        <select id="building-set">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="cancel-add-btn">Cancel</button>
+                    <button class="btn-primary" id="confirm-add-btn">Add Building</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Footer -->
+        <footer class="stats-footer">
+            <div class="stat-item">
+                <span class="stat-label">Placed Buildings</span>
+                <span class="stat-value" id="placed-buildings-count">0/0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Roads</span>
+                <span class="stat-value" id="roads-count">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Empty</span>
+                <span class="stat-value" id="empty-tiles-count">144</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Total</span>
+                <span class="stat-value" id="total-tiles-count">144</span>
+            </div>
+            <div class="stat-item optimization-status" id="optimization-status" style="display: none;">
+                <span class="stat-label">Optimizing...</span>
+                <span class="stat-value" id="optimization-progress">0%</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
