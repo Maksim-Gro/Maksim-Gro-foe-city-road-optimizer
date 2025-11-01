@@ -10,7 +10,6 @@ A modern, feature-rich web-based tool for simulating and optimizing city layouts
 - **Town Hall**: Pre-placed Town Hall (7×6) as the central building
 - **Drag & Drop**: Intuitive drag-and-drop interface for placing buildings
 - **Road System**: Automatic road generation connecting all road-requiring buildings to the Town Hall
-- **Building Sets**: Organize buildings into sets for better management
 
 ### Advanced Optimization
 - **8 Optimization Algorithms**:
@@ -73,7 +72,6 @@ A modern, feature-rich web-based tool for simulating and optimizing city layouts
      - Width and Height (in tiles)
      - Road requirement checkbox
      - Color selection
-     - Optional: Assign to a Building Set
    - Click "Add Building"
    - Drag the building from the sidebar onto the grid
 
@@ -89,11 +87,6 @@ A modern, feature-rich web-based tool for simulating and optimizing city layouts
 4. **Delete Buildings**
    - Click the "×" button on any building in the sidebar
    - Town Hall cannot be deleted
-
-5. **Building Sets**
-   - Create sets to organize buildings
-   - Add buildings to sets when creating them
-   - Useful for managing large cities
 
 ### Optimization
 
@@ -191,7 +184,6 @@ The export format is JSON:
   "gridWidth": 20,
   "gridHeight": 20,
   "buildings": [...],
-  "buildingSets": [...],
   "timestamp": "2024-..."
 }
 ```
@@ -212,7 +204,7 @@ The export format is JSON:
 - **More Optimization Algorithms**: 8 different strategies vs 3
 - **Parallel Processing**: Run multiple algorithms simultaneously
 - **Better Performance**: Optimized rendering and algorithms
-- **More Features**: Building sets, undo/redo, import/export, zoom, rotation
+- **More Features**: Undo/redo, import/export, zoom, rotation
 - **Better Statistics**: Detailed statistics display
 - **Visual Feedback**: Progress indicators and visual cues
 - **Keyboard Shortcuts**: Power user features
@@ -225,3 +217,4 @@ The export format is JSON:
 - Use parallel processing for faster optimization (more processes = faster but uses more CPU)
 - Buildings that don't fit in the grid cannot be placed
 - Town Hall cannot be deleted or moved (it's the anchor for all road networks)
+
