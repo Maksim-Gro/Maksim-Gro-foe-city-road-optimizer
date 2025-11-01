@@ -544,14 +544,12 @@ body {
 }
 
 /* Building List */
-#buildings-list,
-#building-sets-list {
+#buildings-list {
     max-height: 400px;
     overflow-y: auto;
 }
 
-.building-item,
-.building-set-item {
+.building-item {
     background: white;
     padding: 12px;
     margin-bottom: 8px;
@@ -561,8 +559,7 @@ body {
     transition: all 0.2s;
 }
 
-.building-item:hover,
-.building-set-item:hover {
+.building-item:hover {
     border-color: var(--primary-color);
     transform: translateX(4px);
     box-shadow: var(--shadow);
