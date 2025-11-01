@@ -16,6 +16,7 @@ let zoomLevel = 1;
 let canvasRotation = 0;
 let isOptimizing = false;
 let optimizationCanceled = false;
+let viewMode = 'top-down'; // 'top-down' or 'isometric'
 
 // Building template colors
 let buildingColorRoad = '#8B4513';
@@ -107,6 +108,13 @@ function setupEventListeners() {
     // Legend
     document.getElementById('legend-select').addEventListener('change', redraw);
     
+    // View Mode
+    document.getElementById('view-mode-select').addEventListener('change', (e) => {
+        viewMode = e.target.value;
+        updateGridSize();
+        redraw();
+    });
+    
     // Town Hall visibility
     document.getElementById('townhall-visible').addEventListener('change', (e) => {
         const townHall = buildings.find(b => b.isTownHall);
@@ -189,14 +197,28 @@ function applyGridSize() {
 function updateGridSize() {
     document.getElementById('grid-size-display').textContent = `${gridWidth}×${gridHeight}`;
     
-    // Set canvas size
-    const baseSize = Math.max(gridWidth, gridHeight) * TILE_SIZE;
-    canvas.width = baseSize * zoomLevel;
-    canvas.height = baseSize * zoomLevel;
+    // Calculate canvas size based on view mode
+    let canvasWidth, canvasHeight;
     
-    // Center canvas
-    const container = canvas.parentElement;
-    canvas.style.transform = `translate(-50%, -50%) scale(${zoomLevel}) rotate(${canvasRotation}deg)`;
+    if (viewMode === 'isometric') {
+        // Isometric view: tiles are rotated, so we need more space
+        const isoScale = Math.sqrt(2); // Diagonal scaling
+        canvasWidth = (gridWidth + gridHeight) * TILE_SIZE * isoScale * zoomLevel;
+        canvasHeight = (gridWidth + gridHeight) * TILE_SIZE * isoScale * zoomLevel;
+    } else {
+        // Top-down view: exact grid dimensions
+        canvasWidth = gridWidth * TILE_SIZE * zoomLevel;
+        canvasHeight = gridHeight * TILE_SIZE * zoomLevel;
+    }
+    
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    
+    // Center canvas with proper positioning
+    canvas.style.position = 'absolute';
+    canvas.style.top = '50%';
+    canvas.style.left = '50%';
+    canvas.style.transform = `translate(-50%, -50%) rotate(${canvasRotation}deg)`;
     canvas.style.transformOrigin = 'center center';
 }
 
@@ -374,8 +396,24 @@ function handleMouseDown(e) {
     
     const rect = canvas.getBoundingClientRect();
     const scale = zoomLevel;
-    const x = Math.floor((e.clientX - rect.left) / (TILE_SIZE * scale));
-    const y = Math.floor((e.clientY - rect.top) / (TILE_SIZE * scale));
+    
+    // Calculate mouse position accounting for canvas centering
+    let mouseX = e.clientX - rect.left - rect.width / 2;
+    let mouseY = e.clientY - rect.top - rect.height / 2;
+    
+    let x, y;
+    if (viewMode === 'isometric') {
+        // Transform back from isometric to grid coordinates
+        const tileSize = TILE_SIZE * scale;
+        x = Math.floor((mouseX / (tileSize * Math.sqrt(2)) + gridWidth / 2));
+        y = Math.floor((mouseY / (tileSize * Math.sqrt(2)) + gridHeight / 2));
+    } else {
+        // Top-down: account for centering offset
+        const offsetX = (rect.width - gridWidth * TILE_SIZE * scale) / 2;
+        const offsetY = (rect.height - gridHeight * TILE_SIZE * scale) / 2;
+        x = Math.floor((e.clientX - rect.left - offsetX) / (TILE_SIZE * scale));
+        y = Math.floor((e.clientY - rect.top - offsetY) / (TILE_SIZE * scale));
+    }
     
     // Find building at this position
     const building = findBuildingAt(x, y);
@@ -396,8 +434,24 @@ function handleMouseMove(e) {
     
     const rect = canvas.getBoundingClientRect();
     const scale = zoomLevel;
-    const x = Math.floor((e.clientX - rect.left) / (TILE_SIZE * scale)) - dragOffset.x;
-    const y = Math.floor((e.clientY - rect.top) / (TILE_SIZE * scale)) - dragOffset.y;
+    
+    // Calculate mouse position accounting for canvas centering
+    let mouseX = e.clientX - rect.left - rect.width / 2;
+    let mouseY = e.clientY - rect.top - rect.height / 2;
+    
+    let x, y;
+    if (viewMode === 'isometric') {
+        // Transform back from isometric to grid coordinates
+        const tileSize = TILE_SIZE * scale;
+        x = Math.floor((mouseX / (tileSize * Math.sqrt(2)) + gridWidth / 2)) - dragOffset.x;
+        y = Math.floor((mouseY / (tileSize * Math.sqrt(2)) + gridHeight / 2)) - dragOffset.y;
+    } else {
+        // Top-down: account for centering offset
+        const offsetX = (rect.width - gridWidth * TILE_SIZE * scale) / 2;
+        const offsetY = (rect.height - gridHeight * TILE_SIZE * scale) / 2;
+        x = Math.floor((e.clientX - rect.left - offsetX) / (TILE_SIZE * scale)) - dragOffset.x;
+        y = Math.floor((e.clientY - rect.top - offsetY) / (TILE_SIZE * scale)) - dragOffset.y;
+    }
     
     // Update preview
     selectedBuilding.x = Math.max(0, Math.min(x, gridWidth - selectedBuilding.width));
@@ -525,39 +579,108 @@ function drawGrid() {
     ctx.fillStyle = '#fafafa';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw grid lines
+    ctx.save();
+    
+    if (viewMode === 'isometric') {
+        drawIsometricGrid();
+    } else {
+        drawTopDownGrid();
+    }
+    
+    ctx.restore();
+}
+
+// Draw top-down orthogonal grid
+function drawTopDownGrid() {
     ctx.strokeStyle = '#e0e0e0';
     ctx.lineWidth = 1;
     
     const tileSize = TILE_SIZE * zoomLevel;
     
+    // Center the grid in canvas
+    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
+    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
+    
     for (let x = 0; x <= gridWidth; x++) {
-        const px = x * tileSize;
+        const px = offsetX + x * tileSize;
         ctx.beginPath();
-        ctx.moveTo(px, 0);
-        ctx.lineTo(px, canvas.height);
+        ctx.moveTo(px, offsetY);
+        ctx.lineTo(px, offsetY + gridHeight * tileSize);
         ctx.stroke();
     }
     
     for (let y = 0; y <= gridHeight; y++) {
-        const py = y * tileSize;
+        const py = offsetY + y * tileSize;
         ctx.beginPath();
-        ctx.moveTo(0, py);
-        ctx.lineTo(canvas.width, py);
+        ctx.moveTo(offsetX, py);
+        ctx.lineTo(offsetX + gridWidth * tileSize, py);
+        ctx.stroke();
+    }
+}
+
+// Draw isometric grid
+function drawIsometricGrid() {
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 1;
+    
+    const tileSize = TILE_SIZE * zoomLevel;
+    const isoWidth = tileSize;
+    const isoHeight = tileSize * 0.5; // Isometric tiles are half-height
+    
+    // Center the grid
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Transform to isometric view
+    ctx.translate(centerX, centerY);
+    ctx.scale(1, 0.5);
+    ctx.rotate(Math.PI / 4); // 45 degrees
+    
+    // Draw isometric grid lines
+    for (let x = 0; x <= gridWidth; x++) {
+        const px = (x - gridWidth / 2) * tileSize;
+        ctx.beginPath();
+        ctx.moveTo(px, -gridHeight * tileSize / 2);
+        ctx.lineTo(px, gridHeight * tileSize / 2);
+        ctx.stroke();
+    }
+    
+    for (let y = 0; y <= gridHeight; y++) {
+        const py = (y - gridHeight / 2) * tileSize;
+        ctx.beginPath();
+        ctx.moveTo(-gridWidth * tileSize / 2, py);
+        ctx.lineTo(gridWidth * tileSize / 2, py);
         ctx.stroke();
     }
 }
 
 // Draw buildings
 function drawBuildings() {
+    ctx.save();
+    
+    if (viewMode === 'isometric') {
+        drawIsometricBuildings();
+    } else {
+        drawTopDownBuildings();
+    }
+    
+    ctx.restore();
+}
+
+// Draw top-down buildings
+function drawTopDownBuildings() {
     const legendMode = document.getElementById('legend-select').value;
     const tileSize = TILE_SIZE * zoomLevel;
+    
+    // Center offset
+    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
+    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
     
     buildings.forEach(building => {
         if (!building.visible) return;
         
-        const x = building.x * tileSize;
-        const y = building.y * tileSize;
+        const x = offsetX + building.x * tileSize;
+        const y = offsetY + building.y * tileSize;
         const width = building.width * tileSize;
         const height = building.height * tileSize;
         
@@ -606,14 +729,115 @@ function drawBuildings() {
     });
 }
 
+// Draw isometric buildings
+function drawIsometricBuildings() {
+    const legendMode = document.getElementById('legend-select').value;
+    const tileSize = TILE_SIZE * zoomLevel;
+    
+    // Center the grid
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Transform to isometric view
+    ctx.translate(centerX, centerY);
+    ctx.scale(1, 0.5);
+    ctx.rotate(Math.PI / 4); // 45 degrees
+    
+    buildings.forEach(building => {
+        if (!building.visible) return;
+        
+        // Calculate isometric position
+        const isoX = (building.x - gridWidth / 2) * tileSize;
+        const isoY = (building.y - gridHeight / 2) * tileSize;
+        const isoWidth = building.width * tileSize;
+        const isoHeight = building.height * tileSize;
+        
+        // Draw building diamond/rhombus
+        ctx.fillStyle = building.color;
+        
+        // Create diamond shape for isometric view
+        const centerX_iso = isoX + isoWidth / 2;
+        const centerY_iso = isoY + isoHeight / 2;
+        const halfW = isoWidth / 2;
+        const halfH = isoHeight / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX_iso, isoY);
+        ctx.lineTo(isoX + isoWidth, centerY_iso);
+        ctx.lineTo(centerX_iso, isoY + isoHeight);
+        ctx.lineTo(isoX, centerY_iso);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Draw border
+        ctx.strokeStyle = building.isTownHall ? '#FFD700' : '#333';
+        ctx.lineWidth = building.isTownHall ? 3 : 2;
+        ctx.stroke();
+        
+        // Draw label
+        if (legendMode !== 'none') {
+            ctx.save();
+            ctx.rotate(-Math.PI / 4); // Rotate text back
+            ctx.scale(1, 2); // Scale back for text
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${12 * zoomLevel}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let text = '';
+            if (legendMode === 'name-size' || legendMode === 'name') {
+                text = building.name;
+            }
+            if (legendMode === 'name-size' || legendMode === 'size') {
+                if (text) text += '\n';
+                text += `${building.width}×${building.height}`;
+            }
+            
+            ctx.fillStyle = '#000';
+            ctx.fillText(text, centerX_iso, centerY_iso * 2 + 1);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(text, centerX_iso, centerY_iso * 2);
+            
+            ctx.restore();
+        }
+        
+        // Draw road requirement indicator
+        if (building.requiresRoad) {
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(centerX_iso, centerY_iso, 5 * zoomLevel, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+}
+
 // Draw roads
 function drawRoads() {
+    ctx.save();
+    
+    if (viewMode === 'isometric') {
+        drawIsometricRoads();
+    } else {
+        drawTopDownRoads();
+    }
+    
+    ctx.restore();
+    updateStatistics();
+}
+
+// Draw top-down roads
+function drawTopDownRoads() {
     const tileSize = TILE_SIZE * zoomLevel;
+    
+    // Center offset
+    const offsetX = (canvas.width - gridWidth * tileSize) / 2;
+    const offsetY = (canvas.height - gridHeight * tileSize) / 2;
     
     roads.forEach(roadKey => {
         const [x, y] = roadKey.split(',').map(Number);
-        const px = x * tileSize;
-        const py = y * tileSize;
+        const px = offsetX + x * tileSize;
+        const py = offsetY + y * tileSize;
         
         ctx.fillStyle = '#808080';
         ctx.fillRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
@@ -623,8 +847,47 @@ function drawRoads() {
         ctx.lineWidth = 1;
         ctx.strokeRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
     });
+}
+
+// Draw isometric roads
+function drawIsometricRoads() {
+    const tileSize = TILE_SIZE * zoomLevel;
     
-    updateStatistics();
+    // Center the grid
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Transform to isometric view
+    ctx.translate(centerX, centerY);
+    ctx.scale(1, 0.5);
+    ctx.rotate(Math.PI / 4); // 45 degrees
+    
+    roads.forEach(roadKey => {
+        const [x, y] = roadKey.split(',').map(Number);
+        
+        // Calculate isometric position
+        const isoX = (x - gridWidth / 2) * tileSize;
+        const isoY = (y - gridHeight / 2) * tileSize;
+        
+        // Draw road as diamond
+        ctx.fillStyle = '#808080';
+        const centerX_iso = isoX + tileSize / 2;
+        const centerY_iso = isoY + tileSize / 2;
+        const halfSize = (tileSize - 4) / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX_iso, isoY + 2);
+        ctx.lineTo(isoX + tileSize - 2, centerY_iso);
+        ctx.lineTo(centerX_iso, isoY + tileSize - 2);
+        ctx.lineTo(isoX + 2, centerY_iso);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Road border
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    });
 }
 
 // Rebuild roads based on current building positions
